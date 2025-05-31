@@ -656,4 +656,7 @@ exit /b
 
 :End
 echo Exiting AllTalk Setup Utility...
+if "%1"=="-silent" (
+	exit
+)
 exit /b
