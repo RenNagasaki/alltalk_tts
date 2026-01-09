@@ -79,7 +79,7 @@ if [[ -n $RVC_VOICES ]]; then
   DOCKER_ARGS+=( -v ${RVC_VOICES}:${ALLTALK_DIR}/models/rvc_voices )
 fi
 
-if [ "ALLTALK_GRADIO_INTERFACE" = true ] ; then
+if [ "$ALLTALK_GRADIO_INTERFACE" = true ] ; then
     if [ "$ALLTALK_ENABLE_MULTI_ENGINE_MANAGER" = true ] ; then
       DOCKER_ARGS+=( -p 7500:7500 )
     else
