@@ -5,26 +5,29 @@ variables:
   TTS_MODEL: "xtts"
   DOCKER_TAG: "latest"
   BASE_IMAGE_REPO: "erew123/"
+  DOCKER_HOST: tcp://docker:2375
+  DOCKER_TLS_CERTDIR: ""
+  DOCKER_DRIVER: overlay2
 
 build-alltalk:
   stage: build
   timeout: 3h
-  image:
-    name: gcr.io/kaniko-project/executor:debug
-    entrypoint: [""]
+  image: docker:27
+  services:
+    - name: docker:27-dind
+      command: ["--storage-driver=overlay2", "--default-ulimit", "nofile=65536:65536"]
   before_script:
-    - mkdir -p /kaniko/.docker
-    - echo "{\"auths\":{\"$CI_REGISTRY\":{\"auth\":\"$(printf '%s:%s' "$CI_REGISTRY_USER" "$CI_REGISTRY_PASSWORD" | base64 | tr -d '\n')\"}}}" > /kaniko/.docker/config.json
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
-    - /kaniko/executor
-      --context $CI_PROJECT_DIR
-      --dockerfile $CI_PROJECT_DIR/Dockerfile
-      --destination $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
+    - docker info
+    - docker build --pull
       --build-arg TTS_MODEL=$TTS_MODEL
       --build-arg DEEPSPEED_VERSION=0.17.2
       --build-arg DOCKER_TAG=$DOCKER_TAG
       --build-arg DOCKER_REPOSITORY=$BASE_IMAGE_REPO
-      --cache=false
-      --snapshot-mode=redo
+      -t $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
+      .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
   tags:
     - docker
