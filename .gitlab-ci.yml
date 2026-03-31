@@ -12,7 +12,8 @@ variables:
   DOCKER_TAG: "latest"
 
 before_script:
-  - source ./docker/variables.sh
+  - apk add --no-cache bash jq
+  - eval $(bash -c 'source ./docker/variables.sh && for key in "${!ALLTALK_VARS[@]}"; do echo "export ${key}=${ALLTALK_VARS[${key}]}"; done')
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
 build-base:
