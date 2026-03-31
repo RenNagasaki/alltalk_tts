@@ -26,6 +26,5 @@ build-alltalk:
       --build-arg DOCKER_REPOSITORY=$BASE_IMAGE_REPO
       --cache=false
       --snapshot-mode=redo
-      --single-snapshot
   tags:
     - docker
