@@ -1,0 +1,59 @@
+stages:
+  - build-base
+  - build
+
+variables:
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_CERT_PATH: "/certs/client"
+  DOCKER_TLS_VERIFY: "1"
+  DOCKER_DRIVER: overlay2
+  TTS_MODEL: "xtts"
+  DOCKER_TAG: "latest"
+
+before_script:
+  - source ./docker/variables.sh
+  - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+
+build-base:
+  stage: build-base
+  timeout: 3h
+  image: docker:27
+  rules:
+    - changes:
+        - docker/variables.sh
+        - docker/base/Dockerfile
+        - .gitlab-ci.yml
+    - when: manual
+      allow_failure: true
+  script:
+    - docker build
+      --build-arg CUDA_VERSION=$CUDA_VERSION
+      --build-arg PYTHON_VERSION=$PYTHON_VERSION
+      -t $CI_REGISTRY_IMAGE/alltalk_tts_environment:$DOCKER_TAG
+      -f docker/base/Dockerfile
+      docker/base/
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE/alltalk_tts_environment:$DOCKER_TAG
+  tags:
+    - docker
+
+build-alltalk:
+  stage: build
+  timeout: 3h
+  image: docker:27
+  needs:
+    - job: build-base
+      optional: true
+  script:
+    - docker build
+      --build-arg TTS_MODEL=$TTS_MODEL
+      --build-arg DEEPSPEED_VERSION=$DEEPSPEED_VERSION
+      --build-arg DOCKER_TAG=$DOCKER_TAG
+      --build-arg DOCKER_REPOSITORY=$CI_REGISTRY_IMAGE/
+      -t $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
+      .
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+    - docker push $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
+  tags:
+    - docker
