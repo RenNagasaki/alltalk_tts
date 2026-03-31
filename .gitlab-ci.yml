@@ -5,17 +5,15 @@ variables:
   TTS_MODEL: "xtts"
   DOCKER_TAG: "latest"
   BASE_IMAGE_REPO: "erew123/"
-  DOCKER_HOST: tcp://docker:2375
-  DOCKER_TLS_CERTDIR: ""
-  DOCKER_DRIVER: overlay2
+  DOCKER_HOST: tcp://docker:2376
+  DOCKER_TLS_CERTDIR: "/certs"
+  DOCKER_CERT_PATH: "/certs/client"
+  DOCKER_TLS_VERIFY: "1"
 
 build-alltalk:
   stage: build
   timeout: 3h
   image: docker:27
-  services:
-    - name: docker:27-dind
-      command: ["--storage-driver=overlay2", "--default-ulimit", "nofile=65536:65536"]
   before_script:
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
   script:
