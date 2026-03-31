@@ -1,5 +1,4 @@
 stages:
-  - build-base
   - build
 
 variables:
@@ -10,48 +9,24 @@ variables:
   DOCKER_DRIVER: overlay2
   TTS_MODEL: "xtts"
   DOCKER_TAG: "latest"
+  # Use upstream base image from Docker Hub (building it locally is too heavy for DinD)
+  BASE_IMAGE_REPO: "erew123/"
 
 before_script:
   - apk add --no-cache bash jq
   - eval $(bash -c 'source ./docker/variables.sh && for key in "${!ALLTALK_VARS[@]}"; do echo "export ${key}=${ALLTALK_VARS[${key}]}"; done')
   - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
 
-build-base:
-  stage: build-base
-  timeout: 3h
-  image: docker:27
-  rules:
-    - changes:
-        - docker/variables.sh
-        - docker/base/Dockerfile
-        - .gitlab-ci.yml
-    - when: manual
-      allow_failure: true
-  script:
-    - docker build
-      --build-arg CUDA_VERSION=$CUDA_VERSION
-      --build-arg PYTHON_VERSION=$PYTHON_VERSION
-      -t $CI_REGISTRY_IMAGE/alltalk_tts_environment:$DOCKER_TAG
-      -f docker/base/Dockerfile
-      docker/base/
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-    - docker push $CI_REGISTRY_IMAGE/alltalk_tts_environment:$DOCKER_TAG
-  tags:
-    - docker
-
 build-alltalk:
   stage: build
   timeout: 3h
   image: docker:27
-  needs:
-    - job: build-base
-      optional: true
   script:
     - docker build --pull
       --build-arg TTS_MODEL=$TTS_MODEL
       --build-arg DEEPSPEED_VERSION=$DEEPSPEED_VERSION
       --build-arg DOCKER_TAG=$DOCKER_TAG
-      --build-arg DOCKER_REPOSITORY=$CI_REGISTRY_IMAGE/
+      --build-arg DOCKER_REPOSITORY=$BASE_IMAGE_REPO
       -t $CI_REGISTRY_IMAGE:latest-$TTS_MODEL
       .
     - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
