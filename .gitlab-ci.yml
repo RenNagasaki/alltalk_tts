@@ -47,7 +47,7 @@ build-alltalk:
     - job: build-base
       optional: true
   script:
-    - docker build
+    - docker build --pull
       --build-arg TTS_MODEL=$TTS_MODEL
       --build-arg DEEPSPEED_VERSION=$DEEPSPEED_VERSION
       --build-arg DOCKER_TAG=$DOCKER_TAG
