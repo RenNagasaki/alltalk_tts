@@ -43,7 +43,14 @@ if "%ERRORLEVEL%" NEQ "0" (
 )
 
 :: Check for "-silent" install command-line argument
-if "%1"=="-silent" goto SilentAutoDetect
+:: Usage: atsetup.bat -silent [cu128|cu121|cpu]
+:: Without a second argument, auto-detects GPU and picks the best variant.
+if "%1"=="-silent" (
+    if /I "%2"=="cpu"   goto SilentForceCpu
+    if /I "%2"=="cu121" goto SilentForceCu121
+    if /I "%2"=="cu128" goto SilentForceCu128
+    goto SilentAutoDetect
+)
 
 :MainMenu
 cls
@@ -407,6 +414,21 @@ if "%BackendOption%"=="4" set "PYTORCH_VARIANT=cpu"   & goto InstallCustomStanda
 if "%BackendOption%"=="9" goto StandaloneMenu
 goto StandaloneBackendMenu
 
+:SilentForceCpu
+set "PYTORCH_VARIANT=cpu"
+echo Silent mode: forced CPU-only install
+goto InstallCustomStandalone
+
+:SilentForceCu121
+set "PYTORCH_VARIANT=cu121"
+echo Silent mode: forced CUDA 12.1 install
+goto InstallCustomStandalone
+
+:SilentForceCu128
+set "PYTORCH_VARIANT=cu128"
+echo Silent mode: forced CUDA 12.8 install
+goto InstallCustomStandalone
+
 :SilentAutoDetect
 call :DetectGpu
 if !DETECTED_GPU_CC_MAJOR! GEQ 12 (
@@ -655,10 +677,8 @@ echo.
 @rem (e.g. DeepSpeed install) can react to it without re-prompting.
 > "%INSTALL_DIR%\variant.txt" echo %PYTORCH_VARIANT%
 
-@rem DeepSpeed has no Blackwell-capable Windows wheel and is irrelevant on CPU.
-@rem For cu128 / cpu installs, disable it in every model_settings.json so xtts
-@rem doesn't try to load deepspeed on first run.
-if /I "%PYTORCH_VARIANT%"=="cu128" goto disable_deepspeed
+@rem DeepSpeed is irrelevant on CPU-only installs.
+@rem Disable it in every model_settings.json so xtts doesn't try to load it.
 if /I "%PYTORCH_VARIANT%"=="cpu"   goto disable_deepspeed
 goto skip_disable_deepspeed
 :disable_deepspeed
@@ -702,13 +722,22 @@ if errorlevel 1 (
 )
 
 :install_deepspeed
+@rem Pick the correct DeepSpeed wheel for the PyTorch/CUDA variant.
+if /I "%PYTORCH_VARIANT%"=="cu128" (
+    set "DS_WHEEL_URL=https://github.com/RenNagasaki/alltalk_tts/releases/download/DeepSpeed-0.17.2-cu128/deepspeed-0.17.2%%2B15f054d-cp311-cp311-win_amd64.whl"
+    set "DS_WHEEL_FILE=deepspeed-0.17.2+15f054d-cp311-cp311-win_amd64.whl"
+) else (
+    set "DS_WHEEL_URL=https://github.com/erew123/alltalk_tts/releases/download/DeepSpeed-14.0/deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl"
+    set "DS_WHEEL_FILE=deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl"
+)
 echo ** Downloading DeepSpeed **
-curl -LO https://github.com/erew123/alltalk_tts/releases/download/DeepSpeed-14.0/deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl
+echo    %DS_WHEEL_URL%
+curl -LO "%DS_WHEEL_URL%"
 echo.
 if errorlevel 1 (
     echo DeepSpeed download failed, errorlevel was %errorlevel%. There should be an error
-    echo message above with a code and/or text explanation of the issue. Please note 
-    echo the error code to help with diagnotics. 
+    echo message above with a code and/or text explanation of the issue. Please note
+    echo the error code to help with diagnotics.
     echo.
     echo Generally speaking though, errors could be caused by:
     echo.
@@ -731,11 +760,11 @@ if errorlevel 1 (
 )
 
 echo ** Installing DeepSpeed **
-pip install deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl
+pip install "%DS_WHEEL_FILE%"
 echo.
 if errorlevel 1 (
     echo DeepSpeed installation failed, errorlevel was %errorlevel%. There should be an error
-    echo message above with a code and/or text explanation of the issue. Please note 
+    echo message above with a code and/or text explanation of the issue. Please note
     echo the error code to help with diagnotics. General issues may be:
     echo.
     echo Generally speaking though, errors could be caused by:
@@ -758,7 +787,7 @@ if errorlevel 1 (
     if errorlevel 1 goto install_deepspeed
 ) else (
     echo DeepSpeed installation was successful.
-    del deepspeed-0.14.0+ce78a63-cp311-cp311-win_amd64.whl
+    del "%DS_WHEEL_FILE%"
     echo.
 )
 
@@ -778,8 +807,7 @@ if /I "%PYTORCH_VARIANT%"=="cpu" (
 )
 if /I "%PYTORCH_VARIANT%"=="cu128" (
     echo.
-    echo    %L_YELLOW%DeepSpeed has been disabled%RESET% - no Blackwell-capable Windows wheel
-    echo    is currently available for PyTorch 2.7 / CUDA 12.8. xtts will run without it.
+    echo    %L_YELLOW%DeepSpeed 0.17.2%RESET% has been installed for CUDA 12.8 ^(Blackwell/Ada/Ampere^).
 )
 
 @rem Create start_environment.bat to run AllTalk environment

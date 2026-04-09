@@ -1,5 +1,6 @@
 stages:
   - build
+  - mirror
 
 variables:
   TTS_MODEL: "xtts"
@@ -31,3 +32,14 @@ build-alltalk:
       && docker push $CI_REGISTRY_IMAGE:latest-$TTS_MODEL)
   tags:
     - docker
+
+mirror-to-github:
+  stage: mirror
+  image: alpine/git:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH
+  script:
+    - git clone --mirror "$CI_REPOSITORY_URL" repo.git
+    - cd repo.git
+    - git remote add github "https://${GITHUB_USER}:${GITHUB_PAT}@github.com/${GITHUB_USER}/alltalk_tts.git"
+    - git push github --mirror --force

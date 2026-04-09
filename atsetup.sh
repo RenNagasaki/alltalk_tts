@@ -474,16 +474,20 @@ install_custom_standalone() {
         curl -LO https://github.com/erew123/alltalk_tts/releases/download/DeepSpeed-14.0/deepspeed-0.14.2+cu121torch2.2-cp311-cp311-manylinux_2_24_x86_64.whl
         pip install deepspeed-0.14.2+cu121torch2.2-cp311-cp311-manylinux_2_24_x86_64.whl
         rm deepspeed-0.14.2+cu121torch2.2-cp311-cp311-manylinux_2_24_x86_64.whl
+    elif [[ "$PYTORCH_VARIANT" == "cu128" ]]; then
+        echo "Installing DeepSpeed from source (cu128 / torch 2.7)..."
+        DS_BUILD_OPS=0 \
+        DS_BUILD_TRANSFORMER_INFERENCE=1 \
+        DS_BUILD_TRANSFORMER=1 \
+        DS_BUILD_STOCHASTIC_TRANSFORMER=1 \
+        DS_BUILD_QUANTIZER=1 \
+        DS_BUILD_FUSED_ADAM=1 \
+        DS_BUILD_CPU_ADAM=1 \
+        pip install deepspeed==0.17.2
     else
-        # No Blackwell-capable Linux DeepSpeed wheel exists for torch 2.7 cu128, and
         # DeepSpeed is irrelevant on CPU. Disable it in every model_settings.json so
         # xtts doesn't try to load deepspeed on first run.
-        echo "** Disabling DeepSpeed in xtts model_settings.json (not supported on ${PYTORCH_VARIANT}) **"
-        # Read THEN write. The naive one-liner truncates the file before reading because
-        # Python evaluates `open(p,'w')` (the receiver of `.write()`) before the argument
-        # expression containing `json.load(open(p))`. The lambda form evaluates
-        # `json.load(open(p))` as a function argument first, so the read completes before
-        # `open(p,'w')` truncates.
+        echo "** Disabling DeepSpeed in model_settings.json (not supported on ${PYTORCH_VARIANT}) **"
         python -c "import json,glob; [(lambda d,p: open(p,'w').write(json.dumps({**d,'deepspeed_enabled':False},indent=4)))(json.load(open(p)),p) for p in glob.glob('system/tts_engines/**/model_settings.json',recursive=True)]"
     fi
     pip install -r system/requirements/requirements_parler.txt
@@ -544,8 +548,7 @@ EOF
         echo -e "    To install ${L_YELLOW}DeepSpeed${NC} on Linux, there are additional"
         echo -e "    steps required. Please see the Github or documentation on DeepSeed."
     elif [[ "$PYTORCH_VARIANT" == "cu128" ]]; then
-        echo -e "    ${L_YELLOW}DeepSpeed has been disabled${NC} - no Blackwell-capable Linux wheel"
-        echo -e "    is currently available for PyTorch 2.7 / CUDA 12.8. xtts will run without it."
+        echo -e "    ${L_YELLOW}DeepSpeed 0.17.2${NC} has been built and installed for CUDA 12.8 (Blackwell/Ada/Ampere)."
     elif [[ "$PYTORCH_VARIANT" == "cpu" ]]; then
         echo -e "    ${L_YELLOW}CPU-only install selected.${NC} xtts generation will be significantly"
         echo -e "    slower than on a GPU. Re-run atsetup.sh to switch backends later."
@@ -689,17 +692,28 @@ reapply_standalone() {
 }
 
 # Check for "-silent" install command-line argument
+# Usage: atsetup.sh -silent [cu128|cu121|cpu]
+# Without a second argument, auto-detects GPU and picks the best variant.
 if [[ $1 == "-silent" ]]; then
-	detect_gpu
-	if (( DETECTED_GPU_CC_MAJOR >= 12 )); then
-		PYTORCH_VARIANT=cu128
-		echo "Silent mode: detected ${DETECTED_GPU_NAME} (cc ${DETECTED_GPU_CC}) - using cu128"
-	elif (( DETECTED_GPU_CC_MAJOR >= 1 )); then
-		PYTORCH_VARIANT=cu121
-		echo "Silent mode: detected ${DETECTED_GPU_NAME} (cc ${DETECTED_GPU_CC}) - using cu121"
+	if [[ -n "$2" ]]; then
+		case "${2,,}" in
+			cpu)   PYTORCH_VARIANT=cpu;   echo "Silent mode: forced CPU-only install" ;;
+			cu121) PYTORCH_VARIANT=cu121; echo "Silent mode: forced CUDA 12.1 install" ;;
+			cu128) PYTORCH_VARIANT=cu128; echo "Silent mode: forced CUDA 12.8 install" ;;
+			*)     echo "Unknown variant '$2'. Use: cpu, cu121, or cu128"; exit 1 ;;
+		esac
 	else
-		PYTORCH_VARIANT=cpu
-		echo "Silent mode: no NVIDIA GPU detected - using CPU-only install"
+		detect_gpu
+		if (( DETECTED_GPU_CC_MAJOR >= 12 )); then
+			PYTORCH_VARIANT=cu128
+			echo "Silent mode: detected ${DETECTED_GPU_NAME} (cc ${DETECTED_GPU_CC}) - using cu128"
+		elif (( DETECTED_GPU_CC_MAJOR >= 1 )); then
+			PYTORCH_VARIANT=cu121
+			echo "Silent mode: detected ${DETECTED_GPU_NAME} (cc ${DETECTED_GPU_CC}) - using cu121"
+		else
+			PYTORCH_VARIANT=cpu
+			echo "Silent mode: no NVIDIA GPU detected - using CPU-only install"
+		fi
 	fi
 	install_custom_standalone
 else 
