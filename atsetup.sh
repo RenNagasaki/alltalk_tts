@@ -410,6 +410,11 @@ install_custom_standalone() {
     # Activate the environment and install requirements
     source "${CONDA_ROOT_PREFIX}/etc/profile.d/conda.sh"
     conda activate "${INSTALL_ENV_DIR}"
+    # Install git into conda so the user doesn't need it installed globally.
+    # Some requirements files use git+ URLs (e.g. requirements_f5tts.txt).
+    echo "** Installing git into conda **"
+    conda install -y git
+
     # Pre-seed `libglib` from conda-forge before FFmpeg's conda-forge install runs.
     # See atsetup.bat for the full explanation - the short version is that the conda
     # solver otherwise mixes a `pkgs/main` libglib (old gettext ABI) with a conda-forge

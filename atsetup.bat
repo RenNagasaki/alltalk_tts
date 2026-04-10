@@ -506,6 +506,12 @@ if not exist "%INSTALL_ENV_DIR%\python.exe" ( echo. && echo Conda environment is
 call "%CONDA_ROOT_PREFIX%\condabin\conda.bat" activate "%INSTALL_ENV_DIR%" || ( echo. && echo Miniconda hook not found. && goto end )
 rem Install required packages
 
+@rem installing git into conda so the user doesn't need it installed globally.
+@rem Some requirements files use git+ URLs (e.g. requirements_f5tts.txt).
+echo ** Installing git into conda **
+call "%CONDA_ROOT_PREFIX%\Scripts\conda.exe" install -y git
+echo.
+
 @rem Pre-seed `libglib` from conda-forge BEFORE FFmpeg's conda-forge install runs.
 @rem Without this, the conda solver happily picks `libglib` from `pkgs/main`
 @rem (defaults channel) while it picks `gdk-pixbuf` and `libintl 0.22.5` from
