@@ -738,7 +738,7 @@ if /I "%PYTORCH_VARIANT%"=="cu128" (
 )
 echo ** Downloading DeepSpeed **
 echo    %DS_WHEEL_URL%
-curl -LO "%DS_WHEEL_URL%"
+curl -L -o "%DS_WHEEL_FILE%" "%DS_WHEEL_URL%"
 echo.
 if errorlevel 1 (
     echo DeepSpeed download failed, errorlevel was %errorlevel%. There should be an error
