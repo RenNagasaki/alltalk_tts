@@ -565,6 +565,30 @@ if errorlevel 1 (
     echo PyTorch installation was successful.
     echo.
 )
+
+@rem DeepSpeed v0.17.2's git_version_info.py re-runs is_compatible() for every op
+@rem at every import, regardless of which ops were prebuilt in the wheel. The
+@rem fp_quantizer builder calls installed_cuda_version() which executes `nvcc -V`,
+@rem so CUDA_HOME (or CUDA_PATH) must point to a directory containing bin/nvcc.exe
+@rem at runtime. Users who don't have the full CUDA Toolkit installed system-wide
+@rem (no CUDA_PATH env var set) hit MissingCUDAException on `import deepspeed`.
+@rem Install conda's cuda-nvcc package (~130 MB) into the env so nvcc is local.
+@rem CUDA_HOME is then exported in the generated start_*.bat below.
+:install_cuda_nvcc_cu128
+echo ** Installing cuda-nvcc=12.8 from nvidia channel (DeepSpeed CUDA_HOME requirement) **
+call "%CONDA_ROOT_PREFIX%\Scripts\conda.exe" install -y -c nvidia cuda-nvcc=12.8
+echo.
+if errorlevel 1 (
+    echo cuda-nvcc installation failed, errorlevel was %errorlevel%.
+    echo Without it, DeepSpeed will fail to import on systems without CUDA Toolkit.
+    echo.
+    choice /C YN /M "Do you want to retry the cuda-nvcc installation?"
+    if errorlevel 2 goto End
+    if errorlevel 1 goto install_cuda_nvcc_cu128
+) else (
+    echo cuda-nvcc installation was successful.
+    echo.
+)
 goto install_pytorch_done
 
 :install_pytorch_cpu
@@ -816,17 +840,30 @@ if /I "%PYTORCH_VARIANT%"=="cu128" (
     echo    %L_YELLOW%DeepSpeed 0.17.2%RESET% has been installed for CUDA 12.8 ^(Blackwell/Ada/Ampere^).
 )
 
+@rem On cu128, point CUDA_HOME at the conda env's Library tree (where the
+@rem nvidia/cuda-nvcc package puts bin\nvcc.exe). DeepSpeed's import-time
+@rem is_compatible() check runs `nvcc -V` and falls back to CUDA_PATH if
+@rem CUDA_HOME is unset, so users without a system-wide CUDA Toolkit would
+@rem otherwise hit MissingCUDAException on `import deepspeed`. Other variants
+@rem (cu121 ships its own conda CUDA, cpu has no CUDA) don't need this.
+set "EMIT_CUDA_HOME=0"
+if /I "%PYTORCH_VARIANT%"=="cu128" set "EMIT_CUDA_HOME=1"
+
 @rem Create start_environment.bat to run AllTalk environment
 echo @echo off > start_environment.bat
 echo cd /D "%~dp0" >> start_environment.bat
 echo set CONDA_ROOT_PREFIX=%cd%\alltalk_environment\conda >> start_environment.bat
 echo set INSTALL_ENV_DIR=%cd%\alltalk_environment\env >> start_environment.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_HOME=%%cd%%\alltalk_environment\env\Library >> start_environment.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_PATH=%%CUDA_HOME%% >> start_environment.bat
 echo call "%CONDA_ROOT_PREFIX%\condabin\conda.bat" activate "%INSTALL_ENV_DIR%" >> start_environment.bat
 @rem Create start_alltalk.bat to run AllTalk
 echo @echo off > start_alltalk.bat
 echo cd /D "%~dp0" >> start_alltalk.bat
 echo set CONDA_ROOT_PREFIX=%cd%\alltalk_environment\conda >> start_alltalk.bat
 echo set INSTALL_ENV_DIR=%cd%\alltalk_environment\env >> start_alltalk.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_HOME=%%cd%%\alltalk_environment\env\Library >> start_alltalk.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_PATH=%%CUDA_HOME%% >> start_alltalk.bat
 echo call "%CONDA_ROOT_PREFIX%\condabin\conda.bat" activate "%INSTALL_ENV_DIR%" >> start_alltalk.bat
 echo call python script.py >> start_alltalk.bat
 @rem Create start_finetune.bat to run AllTalk
@@ -834,12 +871,16 @@ echo @echo off > start_finetune.bat
 echo cd /D "%~dp0" >> start_finetune.bat
 echo set CONDA_ROOT_PREFIX=%cd%\alltalk_environment\conda >> start_finetune.bat
 echo set INSTALL_ENV_DIR=%cd%\alltalk_environment\env >> start_finetune.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_HOME=%%cd%%\alltalk_environment\env\Library >> start_finetune.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_PATH=%%CUDA_HOME%% >> start_finetune.bat
 echo call "%CONDA_ROOT_PREFIX%\condabin\conda.bat" activate "%INSTALL_ENV_DIR%" >> start_finetune.bat
 echo call python finetune.py >> start_finetune.bat
 echo @echo off > start_diagnostics.bat
 echo cd /D "%~dp0" >> start_diagnostics.bat
 echo set CONDA_ROOT_PREFIX=%cd%\alltalk_environment\conda >> start_diagnostics.bat
 echo set INSTALL_ENV_DIR=%cd%\alltalk_environment\env >> start_diagnostics.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_HOME=%%cd%%\alltalk_environment\env\Library >> start_diagnostics.bat
+if "%EMIT_CUDA_HOME%"=="1" echo set CUDA_PATH=%%CUDA_HOME%% >> start_diagnostics.bat
 echo call "%CONDA_ROOT_PREFIX%\condabin\conda.bat" activate "%INSTALL_ENV_DIR%" >> start_diagnostics.bat
 echo call python diagnostics.py >> start_diagnostics.bat
 Echo.

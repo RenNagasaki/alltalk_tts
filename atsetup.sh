@@ -431,7 +431,14 @@ install_custom_standalone() {
             # Blackwell / RTX 50 series. Only torch >= 2.7 cu128 ships sm_120 kernels,
             # and there is no conda pytorch-cuda=12.8 build, so use the pip wheels.
             pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cu128
-            conda install -y -c nvidia cuda-runtime=12.8
+            # cuda-nvcc (not just cuda-runtime) is required because DeepSpeed v0.17.2's
+            # git_version_info.py re-runs is_compatible() for every op at every import.
+            # fp_quantizer's check calls `nvcc -V` and raises MissingCUDAException if
+            # CUDA_HOME has no bin/nvcc. The pip-installed torch wheel ships only
+            # runtime libs, no nvcc, so without this users without a system-wide CUDA
+            # Toolkit cannot `import deepspeed`. CUDA_HOME is exported in the start
+            # scripts below.
+            conda install -y -c nvidia cuda-nvcc=12.8 cuda-runtime=12.8
             ;;
         cpu)
             pip install torch==2.7.1 torchvision==0.22.1 torchaudio==2.7.1 --index-url https://download.pytorch.org/whl/cpu
@@ -519,14 +526,27 @@ export CUDA_HOME="$CUDA_PATH"
 # activate env
 bash --init-file <(echo "source \"$CONDA_ROOT_PREFIX/etc/profile.d/conda.sh\" && conda activate \"$INSTALL_ENV_DIR\"")
 EOF
+    # On cu128, point CUDA_HOME at the conda env so DeepSpeed's import-time
+    # is_compatible() check finds bin/nvcc. start_environment.sh already does
+    # this; the other scripts need it too because `import deepspeed` runs
+    # before any user-supplied env setup.
+    if [[ "$PYTORCH_VARIANT" == "cu128" ]]; then
+        cuda_home_export='export CUDA_HOME="$INSTALL_ENV_DIR"; export CUDA_PATH="$CUDA_HOME"'
+    else
+        cuda_home_export=''
+    fi
     cat << EOF > start_alltalk.sh
 #!/bin/bash
+INSTALL_ENV_DIR="${INSTALL_ENV_DIR}"
+${cuda_home_export}
 source "${CONDA_ROOT_PREFIX}/etc/profile.d/conda.sh"
 conda activate "${INSTALL_ENV_DIR}"
 python script.py
 EOF
     cat << EOF > start_finetune.sh
 #!/bin/bash
+INSTALL_ENV_DIR="${INSTALL_ENV_DIR}"
+${cuda_home_export}
 export TRAINER_TELEMETRY=0
 source "${CONDA_ROOT_PREFIX}/etc/profile.d/conda.sh"
 conda activate "${INSTALL_ENV_DIR}"
@@ -534,6 +554,8 @@ python finetune.py
 EOF
     cat << EOF > start_diagnostics.sh
 #!/bin/bash
+INSTALL_ENV_DIR="${INSTALL_ENV_DIR}"
+${cuda_home_export}
 source "${CONDA_ROOT_PREFIX}/etc/profile.d/conda.sh"
 conda activate "${INSTALL_ENV_DIR}"
 python diagnostics.py
