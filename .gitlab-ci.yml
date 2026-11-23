@@ -20,6 +20,9 @@ variables:
 
 build-alltalk:
   stage: build
+  # The image build is independent of the mirror: a stuck or failed build (no runner, 3h timeout)
+  # must not skip the privacy gate and the GitHub mirror in the later stages.
+  allow_failure: true
   timeout: 3h
   image: docker:27
   before_script:
